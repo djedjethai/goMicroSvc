@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/djedjethai/broker/pkg/consumer"
 	"github.com/djedjethai/broker/pkg/domain/jsdomain"
-
-	//"github.com/djedjethai/broker/pkg/dto"
-	//"github.com/djedjethai/broker/pkg/http/rest"
+	"github.com/djedjethai/broker/pkg/emitter"
+	// "github.com/djedjethai/broker/pkg/event"
 	"net/http"
 )
 
@@ -16,16 +16,19 @@ type Service interface {
 	GetResponse() []JsonResponse
 	AddData(JsonResponse) JsonSavedResponse
 	Authenticate(a AuthPayload) (error, int, *JsonResponse)
-	LogItem(rp LogPayload) (error, int, *JsonResponse)
+	LogEventViaRabbit(l LogPayload) (error, int, *JsonResponse)
+	// LogItem(rp LogPayload) (error, int, *JsonResponse)
 	SendMail(rp MailPayload) (error, int, *JsonResponse)
 }
 
 type service struct {
-	r jsdomain.RepoInterf
+	r    jsdomain.RepoInterf
+	cons consumer.Consumer
+	emit emitter.Emitter
 }
 
-func NewService(r jsdomain.RepoInterf) Service {
-	return &service{r}
+func NewService(r jsdomain.RepoInterf, cons consumer.Consumer, emit emitter.Emitter) Service {
+	return &service{r, cons, emit}
 }
 
 func (s *service) SendMail(rp MailPayload) (error, int, *JsonResponse) {
@@ -60,39 +63,72 @@ func (s *service) SendMail(rp MailPayload) (error, int, *JsonResponse) {
 	return nil, http.StatusAccepted, &payload
 }
 
-func (s *service) LogItem(rp LogPayload) (error, int, *JsonResponse) {
+// new method which push logs to RabbitMQ, which then push to the listener
+func (s *service) LogEventViaRabbit(l LogPayload) (error, int, *JsonResponse) {
+	var payload = JsonResponse{}
 
-	var payload JsonResponse
-
-	jsonData, _ := json.MarshalIndent(rp, "", "\t")
-
-	logServiceURL := "http://logger-service/log"
-
-	request, err := http.NewRequest("POST", logServiceURL, bytes.NewBuffer(jsonData))
+	err := s.pushToQueue(l.Name, l.Data)
 	if err != nil {
-		return err, http.StatusNotFound, &payload
-	}
-
-	request.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-
-	response, err := client.Do(request)
-	if err != nil {
-		return err, http.StatusNotFound, &payload
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusAccepted {
-		return errors.New("Error connecting with the logger"), response.StatusCode, &payload
+		return errors.New("Error pushing to RabbitMQ"), http.StatusInternalServerError, &payload
 	}
 
 	payload.Error = false
-	payload.Message = "logged"
+	payload.Message = "logged via rabbitMQ"
 
 	return nil, http.StatusAccepted, &payload
-
 }
+
+func (s *service) pushToQueue(name, msg string) error {
+	payload := LogPayload{
+		Name: name,
+		Data: msg,
+	}
+
+	j, _ := json.MarshalIndent(&payload, "", "\t")
+	// log.INFO is the severity, so we could break various info per severity
+	// like WARNING etc
+	err := s.emit.Push(string(j), "log.INFO")
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// old method which was logging logs directly to DB
+// func (s *service) LogItem(rp LogPayload) (error, int, *JsonResponse) {
+//
+// 	var payload JsonResponse
+//
+// 	jsonData, _ := json.MarshalIndent(rp, "", "\t")
+//
+// 	logServiceURL := "http://logger-service/log"
+//
+// 	request, err := http.NewRequest("POST", logServiceURL, bytes.NewBuffer(jsonData))
+// 	if err != nil {
+// 		return err, http.StatusNotFound, &payload
+// 	}
+//
+// 	request.Header.Set("Content-Type", "application/json")
+//
+// 	client := &http.Client{}
+//
+// 	response, err := client.Do(request)
+// 	if err != nil {
+// 		return err, http.StatusNotFound, &payload
+// 	}
+// 	defer response.Body.Close()
+//
+// 	if response.StatusCode != http.StatusAccepted {
+// 		return errors.New("Error connecting with the logger"), response.StatusCode, &payload
+// 	}
+//
+// 	payload.Error = false
+// 	payload.Message = "logged"
+//
+// 	return nil, http.StatusAccepted, &payload
+//
+// }
 
 func (s *service) Authenticate(a AuthPayload) (error, int, *JsonResponse) {
 

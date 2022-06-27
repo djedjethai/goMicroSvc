@@ -58,10 +58,18 @@ func handleSubmission(js service.Service) http.HandlerFunc {
 
 			writeJson(w, status, payload)
 		case "log":
-			err, status, payload := js.LogItem(requestPayload.Log)
+			// new method to push log to RabbitMQ, which will push to listener
+			err, status, payload := js.LogEventViaRabbit(requestPayload.Log)
 			if err != nil {
 				errorJson(w, err, status)
 			}
+			writeJson(w, status, payload)
+
+			// old method to push log directly to DB
+			// err, status, payload := js.LogItem(requestPayload.Log)
+			// if err != nil {
+			// 	errorJson(w, err, status)
+			// }
 
 			writeJson(w, status, payload)
 		case "mail":
