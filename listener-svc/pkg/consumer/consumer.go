@@ -56,7 +56,7 @@ func (c *consumer) Listen(topics []string) error {
 
 	// range on the topics
 	for _, s := range topics {
-		// bind our channels to each of this topics
+		// bind our channel to each of this topics
 		ch.QueueBind(
 			q.Name,
 			s,

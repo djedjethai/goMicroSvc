@@ -1,5 +1,10 @@
 package service
 
+type RPCPayload struct {
+	Name string
+	Data string
+}
+
 type JsonResponse struct {
 	Error   bool        `json:"error"`
 	Message string      `json:"message"`

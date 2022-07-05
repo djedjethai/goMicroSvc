@@ -32,6 +32,7 @@ func main() {
 	defer rabbitConn.Close()
 
 	evt := event.NewEvent()
+	// here the brocker simply emit event(so the consumer is useless)
 	cons, err := consumer.NewConsumer(rabbitConn, evt)
 	emit, err := emitter.NewEmitter(rabbitConn, evt)
 	if err != nil {
@@ -46,6 +47,7 @@ func main() {
 	var svc service.Service
 
 	repo := new(jsdomain.Repository)
+	// HERE the cons is useless, BUT I could pass it like so
 	svc = service.NewService(repo, cons, emit)
 
 	// populate the repo

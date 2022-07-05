@@ -37,6 +37,8 @@ services:
       context: ./logger-svc
       dockerfile: ./logger-service.dockerfile
     restart: always
+    # ports:
+    #   - "5001:5001"
     deploy:
       mode: replicated
       replicas: 1

@@ -4,19 +4,22 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/djedjethai/broker/pkg/consumer"
 	"github.com/djedjethai/broker/pkg/domain/jsdomain"
 	"github.com/djedjethai/broker/pkg/emitter"
 	// "github.com/djedjethai/broker/pkg/event"
 	"net/http"
+	"net/rpc"
 )
 
 type Service interface {
 	GetResponse() []JsonResponse
 	AddData(JsonResponse) JsonSavedResponse
 	Authenticate(a AuthPayload) (error, int, *JsonResponse)
-	LogEventViaRabbit(l LogPayload) (error, int, *JsonResponse)
+	LogItemViaRPC(l LogPayload) (error, int, *JsonResponse)
+	// LogEventViaRabbit(l LogPayload) (error, int, *JsonResponse)
 	// LogItem(rp LogPayload) (error, int, *JsonResponse)
 	SendMail(rp MailPayload) (error, int, *JsonResponse)
 }
@@ -63,37 +66,74 @@ func (s *service) SendMail(rp MailPayload) (error, int, *JsonResponse) {
 	return nil, http.StatusAccepted, &payload
 }
 
-// new method which push logs to RabbitMQ, which then push to the listener
-func (s *service) LogEventViaRabbit(l LogPayload) (error, int, *JsonResponse) {
+// new new method which log event to MongoDB using RPC
+func (s *service) LogItemViaRPC(l LogPayload) (error, int, *JsonResponse) {
+
 	var payload = JsonResponse{}
 
-	err := s.pushToQueue(l.Name, l.Data)
+	fmt.Println("in LogItemViaRPC")
+
+	// logger-service is the docker-compose svc name
+	client, err := rpc.Dial("tcp", "logger-service:5001")
 	if err != nil {
-		return errors.New("Error pushing to RabbitMQ"), http.StatusInternalServerError, &payload
+		fmt.Println("in LogItemViaRPC_error: ", err)
+		return errors.New("Error connecting to RPC server"), http.StatusInternalServerError, &payload
+	}
+
+	// the type we gonna use here HAVE TO BE EXACTLY SAME
+	// the one the server is expecting to get
+	rpcPayload := RPCPayload{
+		Name: l.Name,
+		Data: l.Data,
+	}
+
+	fmt.Println("in LogItemViaRPC_2")
+
+	var result string
+	// "RPCServer is the type one the server side"
+	// the last param &result is the response from the server
+	err = client.Call("RPCServer.LogInfo", rpcPayload, &result)
+	if err != nil {
+		return errors.New("Error sending data to RPC server"), http.StatusInternalServerError, &payload
 	}
 
 	payload.Error = false
-	payload.Message = "logged via rabbitMQ"
+	payload.Message = result
 
 	return nil, http.StatusAccepted, &payload
 }
 
-func (s *service) pushToQueue(name, msg string) error {
-	payload := LogPayload{
-		Name: name,
-		Data: msg,
-	}
-
-	j, _ := json.MarshalIndent(&payload, "", "\t")
-	// log.INFO is the severity, so we could break various info per severity
-	// like WARNING etc
-	err := s.emit.Push(string(j), "log.INFO")
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
+// new method which push logs to RabbitMQ, which then push to the listener
+// func (s *service) LogEventViaRabbit(l LogPayload) (error, int, *JsonResponse) {
+// 	var payload = JsonResponse{}
+//
+// 	err := s.pushToQueue(l.Name, l.Data)
+// 	if err != nil {
+// 		return errors.New("Error pushing to RabbitMQ"), http.StatusInternalServerError, &payload
+// 	}
+//
+// 	payload.Error = false
+// 	payload.Message = "logged via rabbitMQ"
+//
+// 	return nil, http.StatusAccepted, &payload
+// }
+//
+// func (s *service) pushToQueue(name, msg string) error {
+// 	payload := LogPayload{
+// 		Name: name,
+// 		Data: msg,
+// 	}
+//
+// 	j, _ := json.MarshalIndent(&payload, "", "\t")
+// 	// log.INFO is the severity, so we could break various info per severity
+// 	// like WARNING etc
+// 	err := s.emit.Push(string(j), "log.INFO")
+// 	if err != nil {
+// 		return err
+// 	}
+//
+// 	return nil
+// }
 
 // old method which was logging logs directly to DB
 // func (s *service) LogItem(rp LogPayload) (error, int, *JsonResponse) {
