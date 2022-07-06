@@ -76,7 +76,6 @@ func (s *service) LogItemViaRPC(l LogPayload) (error, int, *JsonResponse) {
 	// logger-service is the docker-compose svc name
 	client, err := rpc.Dial("tcp", "logger-service:5001")
 	if err != nil {
-		fmt.Println("in LogItemViaRPC_error: ", err)
 		return errors.New("Error connecting to RPC server"), http.StatusInternalServerError, &payload
 	}
 
@@ -86,8 +85,6 @@ func (s *service) LogItemViaRPC(l LogPayload) (error, int, *JsonResponse) {
 		Name: l.Name,
 		Data: l.Data,
 	}
-
-	fmt.Println("in LogItemViaRPC_2")
 
 	var result string
 	// "RPCServer is the type one the server side"

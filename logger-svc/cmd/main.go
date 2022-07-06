@@ -1,5 +1,8 @@
 package main
 
+// to compile a .proto file
+// protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative logs.proto
+
 // mongodb://admin:password@localhost:27017/logs?authSource=admin&readPreference=primary&appname
 // =MongoDB%20Compass&directConnection=true&ssl=false
 
@@ -13,7 +16,9 @@ import (
 	"time"
 
 	"github.com/djedjethai/logger/pkg/handlers/handlehttp"
+	"google.golang.org/grpc"
 	// "github.com/djedjethai/logger/pkg/handlers/handlerpc"
+	"github.com/djedjethai/logger/pkg/logs"
 	"github.com/djedjethai/logger/pkg/service"
 	"github.com/djedjethai/logger/pkg/storage"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -43,6 +48,8 @@ func main() {
 	if err != nil {
 		log.Panic(err)
 	}
+	// create store
+	store := storage.New(mongoClient)
 
 	// create a context in order to disconnect
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -50,8 +57,6 @@ func main() {
 
 	switch protocole {
 	case HTTP:
-		// create store
-		store := storage.New(mongoClient)
 
 		// create svc
 		service := service.NewService(store.LogEntry)
@@ -92,6 +97,9 @@ func main() {
 		// start rpc server
 		go rpcListen()
 
+		// start grpc
+		go gRPCListen(store)
+
 		log.Println("Logger listen on port ", webPort)
 		err = srv.ListenAndServe()
 		if err != nil {
@@ -106,6 +114,27 @@ func main() {
 			panic(err)
 		}
 	}()
+}
+
+func gRPCListen(store storage.Models) {
+	fmt.Println("hit grpc listen")
+
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", gRpcPort))
+	if err != nil {
+		fmt.Println("hit grpc listen1: ", err)
+		log.Fatalf("Failed to listen for gRPC: %v", err)
+	}
+
+	server := grpc.NewServer()
+	// the LogServer we created in the proto file
+	logs.RegisterLogServiceServer(server, &storage.LogServer{Models: store})
+
+	log.Printf("gRPC server started on port: %v", gRpcPort)
+
+	if err := server.Serve(lis); err != nil {
+		fmt.Println("hit grpc listen2: ", err)
+		log.Fatalf("Failed to listen for gRPC: %v", err)
+	}
 }
 
 func rpcListen() error {

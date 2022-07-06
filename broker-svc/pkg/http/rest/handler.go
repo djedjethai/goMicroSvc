@@ -3,13 +3,19 @@ package rest
 import (
 	"encoding/json"
 	"errors"
+	"time"
+
 	// "github.com/djedjethai/broker/pkg/dto"
 	"net/http"
 
+	"github.com/djedjethai/broker/pkg/logs"
 	"github.com/djedjethai/broker/pkg/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"golang.org/x/net/context"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 // pass svc as arg in the handler()
@@ -34,7 +40,52 @@ func Handler(js service.Service) http.Handler {
 	// single entry point will handle all req
 	mux.Post("/handle", handleSubmission(js))
 
+	// the route for the grpc
+	mux.Post("/log-grpc", logViaGRPC())
+
 	return mux
+}
+
+func logViaGRPC() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var requestPayload service.RequestPayload
+		err := readJson(w, r, &requestPayload)
+		if err != nil {
+			errorJson(w, err)
+			return
+		}
+
+		// second arg is the creadential of the server to connect to
+		//  third arg are the options
+		conn, err := grpc.Dial("logger-service:50001", grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+		if err != nil {
+			errorJson(w, err)
+			return
+		}
+		defer conn.Close()
+
+		// create the client
+		c := logs.NewLogServiceClient(conn)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+
+		_, err = c.WriteLog(ctx, &logs.LogRequest{
+			LogEntry: &logs.Log{
+				Name: requestPayload.Log.Name,
+				Data: requestPayload.Log.Data,
+			},
+		})
+		if err != nil {
+			errorJson(w, err)
+			return
+		}
+
+		var jr service.JsonResponse
+		jr.Error = false
+		jr.Message = "Logged with grpc"
+
+		_ = writeJson(w, http.StatusOK, jr)
+	}
 }
 
 func handleSubmission(js service.Service) http.HandlerFunc {
