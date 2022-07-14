@@ -5,3 +5,5 @@ logger-svc/bin
 mail-svc/bin
 toolbox/
 db-data/
+
+Caddyfile

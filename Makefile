@@ -4,6 +4,7 @@ AUTH_BINARY=authApp
 LOGGER_BINARY=loggerApp
 MAILER_BINARY=mailerApp
 LISTENER_BINARY=listenerApp
+FRONT_BINARY=frontEndApp
 
 ## up: starts all containers in the background without forcing build
 up:
@@ -12,7 +13,7 @@ up:
 	@echo "Docker images started!"
 
 ## up_build: stops docker-compose (if running), builds all projects and starts docker compose
-up_build: build_broker build_auth build_logger build_mailer build_listener
+up_build: build_broker build_auth build_logger build_mailer build_listener build_front_end
 	@echo "Stopping docker images (if running...)"
 	sudo docker-compose down
 	@echo "Building (when required) and starting docker images..."
@@ -25,10 +26,17 @@ down:
 	sudo docker-compose down
 	@echo "Done!"
 
+## build_front: build the front-end binary as a linux executable
+build_front_end:
+	@echo "Building front binary..."
+	cd ./front-end && env GOOS=linux CGO_ENABLED=0 go build -o ${FRONT_BINARY} ./cmd/web 
+	@echo "Done!"
+
 ## build_listener: builds the listener binary as a linux executable
 build_listener:
 	@echo "Building listener binary..."
 	cd ./listener-svc/bin && env GOOS=linux CGO_ENABLED=0 go build -o ${LISTENER_BINARY} ../cmd
+	@echo "Done!"
 
 ## build_mailer: builds the mailer binary as a linux executable
 build_mailer:
