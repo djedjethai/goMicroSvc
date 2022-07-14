@@ -17,5 +17,5 @@ The objectif here was not to implement a fully functional application but to foc
 
 ## key issues
 - Implementing each service following the hexagonal architecture
-- Using RPC and/or gRPC to hasten the communication between services 
+- Using RPC or gRPC to hasten the communication between services 
 - Setting up RabbbitMQ to provide event-messaging communication between services  
